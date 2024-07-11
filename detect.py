@@ -74,17 +74,16 @@ stop_flag = threading.Event()
 def send_position():
 
     global shared_position
+    data = 0
 
     while not stop_flag.is_set():
-
-        data = 0.0
 
         with data_lock:
             if shared_position is not None:
                 data = shared_position
                 shared_position = None
 
-        if data != 0.0:
+        if data is not None and data != 0:
             try:
                     response = requests.post(flask_server_url, json={'position': data})
                     if response.status_code == 200:
@@ -95,7 +94,7 @@ def send_position():
             except requests.exceptions.RequestException as e:
                 print('发送请求时发生错误:', e)
         
-        time.sleep(1)
+        time.sleep(0.2)
 
 
 def detect(save_img=False):
@@ -154,6 +153,10 @@ def detect(save_img=False):
 
     t0 = time.time()
     for path, img, im0s, vid_cap in dataset:
+
+        if stop_flag.is_set():
+            break
+
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -258,12 +261,21 @@ def detect(save_img=False):
     print(f'Done. ({time.time() - t0:.3f}s)')
 
 
+def detect_and_optimize():
+    for opt.weights in ['yolov7.pt']:
+        if stop_flag.is_set():
+            break
+        detect()
+        strip_optimizer(opt.weights)
+            
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.6, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.7, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
@@ -283,19 +295,38 @@ if __name__ == '__main__':
     #check_requirements(exclude=('pycocotools', 'thop'))
 
     # Start a new thread to send the position data to the Flask server
-    thread1 = threading.Thread(target=send_position)
-    thread1.start()
+    thread_send = threading.Thread(target=send_position)
+    thread_send.start()
 
 
     with torch.no_grad():
         if opt.update:  # update all models (to fix SourceChangeWarning)
-            for opt.weights in ['yolov7.pt']:
-                detect()
-                strip_optimizer(opt.weights)
+            thread_detect_and_optimize = threading.Thread(target=detect_and_optimize)
+            thread_detect_and_optimize.start()
         else:
-            detect()
+            thread_detect = threading.Thread(target=detect)
+            thread_detect.start()
             
-    
+    try:
+    # 主线程等待 CTRL+C
+        while (thread_detect.is_alive() or thread_detect_and_optimize.is_alive()) and thread_send.is_alive():
+            if opt.update:
+                thread_detect_and_optimize.join(1)
+            else:
+                thread_detect.join(1)
+            
+            thread_send.join(1)
+
+    except KeyboardInterrupt:
+        print("CTRL+C pressed, stopping threads...")
+        stop_flag.set()
+
+        if opt.update:
+            thread_detect_and_optimize.join()
+        else:
+            thread_detect.join()
+            
+        thread_send.join()
 
     print('All threads stopped.')
 

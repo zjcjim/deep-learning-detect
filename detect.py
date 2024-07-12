@@ -336,13 +336,10 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
 
-    # add an argument to run locally
-    parser.add_argument('--local', action='store_true', help='run without the RasPi and IP Server')
-
     opt = parser.parse_args()
     print(opt)
 
-    if not opt.local and opt.source == 'pi':
+    if opt.source == 'pi':
         # register the backend IP address
         ip_register_url = ip_server_url + '/register'
         local_ip_data = {'name': 'backend', 'ip': get_local_ip()}

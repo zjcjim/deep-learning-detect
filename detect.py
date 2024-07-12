@@ -277,10 +277,7 @@ def detect(save_img=False):
                     x_center_normalized = (x_center / im0.shape[1]) * 2 - 1
                     print(f"Center X normalized: {x_center_normalized:.3f}")
 
-                    tensor_x_center = torch.tensor(x_center_normalized, device='cuda')
-                    x_data = tensor_x_center.cpu().numpy()
-
-                    pf.update(np.array([x_data, 0]), std=0.1)
+                    pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.1)
 
                     with data_lock:
                         shared_position = float(pf.estimate()[0])

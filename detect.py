@@ -23,6 +23,13 @@ import numpy as np
 from scipy.stats import norm
 from filterpy.monte_carlo import systematic_resample
 
+ip_server_url = 'http://124.71.164.229:5000'
+pi_ip = None
+
+shared_position = [0, 0]
+data_lock = threading.Lock()
+stop_flag = threading.Event()
+
 class ParticleFilter:
     def __init__(self, num_particles, x_range, y_range):
         self.num_particles = num_particles
@@ -76,43 +83,6 @@ def convert_to_tensor(data):
     tensor_data = torch.tensor(data, device='cuda')
     return tensor_data.cpu().numpy()
 
-ip_server_url = 'http://124.71.164.229:5000'
-
-ip_register_url = ip_server_url + '/register'
-data = {'name': 'backend', 'ip': get_local_ip()}
-headers = {'Content-Type': 'application/json'}
-
-response = requests.post(ip_register_url, json=data, headers=headers)
-print(response.json())
-
-ip_fetch_url = ip_server_url + '/get_ips'
-
-while True:
-    try:
-        response = requests.get(ip_fetch_url)
-        data = response.json()
-        if response.status_code == 200:
-            data = response.json()
-            pi_ip = data.get("pi")
-            if pi_ip:
-                print(f"IP address of pi: {pi_ip}")
-                break
-            else:
-                print("Device 'pi' not found")
-        else:
-            print(f"Failed to fetch IPs, status code: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        print(f"Error occurred: {e}")
-
-    time.sleep(2)
-
-flask_server_url = f"http://{pi_ip}:5000/position"
-webcam_url = f"http://{pi_ip}:9000/stream.mjpeg"
-
-shared_position = [0, 0]
-data_lock = threading.Lock()
-stop_flag = threading.Event()
-
 def send_position():
     global shared_position
     data = [0, 0]
@@ -145,7 +115,7 @@ def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
-        ('rtsp://', 'rtmp://', 'http://', 'https://'))
+        ('rtsp://', 'rtmp://', 'http://', 'https://')) or (source == 'pi')
 
     save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)
@@ -175,7 +145,10 @@ def detect(save_img=False):
     if webcam:
         view_img = check_imshow()
         cudnn.benchmark = True
-        dataset = LoadStreams(source, img_size=imgsz, stride=stride)
+        if source == 'pi':
+            dataset = LoadStreams(webcam_url, img_size=imgsz, stride=stride)
+        else:
+            dataset = LoadStreams(source, img_size=imgsz, stride=stride)
     else:
         dataset = LoadImages(source, img_size=imgsz, stride=stride)
 
@@ -290,12 +263,13 @@ def detect(save_img=False):
                     pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.05)
                     pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.05)
 
-                    with data_lock:
-                        # what is estimate()?
-                        # shared_position = float(pf.estimate()[0])
+                    if pi_ip is not None:
+                        with data_lock:
+                            # what is estimate()?
+                            # shared_position = float(pf.estimate()[0])
 
-                        shared_position[0] = float(x_center_normalized)
-                        shared_position[1] = float(y_center_normalized)
+                            shared_position[0] = float(x_center_normalized)
+                            shared_position[1] = float(y_center_normalized)
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1
@@ -344,7 +318,7 @@ def detect_and_optimize():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='inference/images', help='source')
+    parser.add_argument('--source', type=str, default='inference/images', help='source, pi for picamera')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.65, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
@@ -361,11 +335,47 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--no-trace', action='store_true', help='don`t trace model')
+
+    # add an argument to run locally
+    parser.add_argument('--local', action='store_true', help='run without the RasPi and IP Server')
+
     opt = parser.parse_args()
     print(opt)
 
-    thread_send = threading.Thread(target=send_position)
-    thread_send.start()
+    if not opt.local:
+        # register the backend IP address
+        ip_register_url = ip_server_url + '/register'
+        local_ip_data = {'name': 'backend', 'ip': get_local_ip()}
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(ip_register_url, json=local_ip_data, headers=headers)
+        print(response.json())
+
+        ip_fetch_url = ip_server_url + '/get_ips'
+
+        while True:
+            try:
+                response = requests.get(ip_fetch_url)
+                data = response.json()
+                if response.status_code == 200:
+                    data = response.json()
+                    pi_ip = data.get("pi")
+                    if pi_ip:
+                        print(f"IP address of pi: {pi_ip}")
+                        break
+                    else:
+                        print("Device 'pi' not found")
+                else:
+                    print(f"Failed to fetch IPs, status code: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error occurred: {e}")
+
+            time.sleep(1)
+
+        flask_server_url = f"http://{pi_ip}:5000/position"
+        webcam_url = f"http://{pi_ip}:9000/stream.mjpeg"
+
+        thread_send = threading.Thread(target=send_position)
+        thread_send.start()
 
     with torch.no_grad():
         if opt.update:
@@ -377,6 +387,8 @@ if __name__ == '__main__':
             thread_detect.start()
             detect_thread = thread_detect
             
+
+    # TODO: Add a way to stop all threads when thread_send is not running
     try:
         while detect_thread.is_alive() and thread_send.is_alive():
             detect_thread.join(1)

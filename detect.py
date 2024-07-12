@@ -342,7 +342,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     print(opt)
 
-    if not opt.local:
+    if not opt.local and opt.source == 'pi':
         # register the backend IP address
         ip_register_url = ip_server_url + '/register'
         local_ip_data = {'name': 'backend', 'ip': get_local_ip()}

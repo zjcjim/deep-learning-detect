@@ -389,16 +389,22 @@ if __name__ == '__main__':
             
 
     # TODO: Add a way to stop all threads when thread_send is not running
+    # Added but not tested
     try:
-        while detect_thread.is_alive() and thread_send.is_alive():
-            detect_thread.join(1)
-            thread_send.join(1)
-
+        while True:
+            if detect_thread.is_alive():
+                detect_thread.join(1)
+            if thread_send.is_alive():
+                thread_send.join(1)
+            if not detect_thread.is_alive() and not thread_send.is_alive():
+                break
     except KeyboardInterrupt:
         print("CTRL+C pressed, stopping threads...")
         stop_flag.set()
 
-        detect_thread.join()
-        thread_send.join()
+        if detect_thread.is_alive():
+            detect_thread.join()
+        if thread_send.is_alive():
+            thread_send.join()
 
     print('All threads stopped.')

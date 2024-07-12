@@ -107,26 +107,31 @@ while True:
     time.sleep(2)
 
 flask_server_url = f"http://{pi_ip}:5000/position"
+webcam_url = f"http://{pi_ip}:9000/stream.mjpeg"
 
-shared_position = 0.0
+shared_position = [0, 0]
 data_lock = threading.Lock()
 stop_flag = threading.Event()
 
 def send_position():
     global shared_position
-    data = 0
+    data = [0, 0]
 
     while not stop_flag.is_set():
         with data_lock:
-            if shared_position is not None:
-                data = shared_position
-                shared_position = None
+            if shared_position != [0, 0]:
 
-        if data is not None and data != 0:
+                data[0] = shared_position[0]
+                data[1] = shared_position[1]
+
+                shared_position[0] = 0
+                shared_position[1] = 0
+
+        if data != [0, 0]:
             try:
-                response = requests.post(flask_server_url, json={'position': data})
+                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
                 if response.status_code == 200:
-                    print('位置数据:'+str(data)+'已发送到'+flask_server_url)
+                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + '已发送到' + flask_server_url)
                 else:
                     print('无法发送位置数据。状态码:', response.status_code)
                     print('响应内容:', response.content)
@@ -134,7 +139,7 @@ def send_position():
                 print('发送请求时发生错误:', e)
         
         time.sleep(0.2)
-        data = 0
+        data = [0, 0]
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -184,7 +189,7 @@ def detect(save_img=False):
 
     t0 = time.time()
 
-    pf = ParticleFilter(num_particles=1000, x_range=(0, imgsz), y_range=(0, imgsz))
+    pf = ParticleFilter(num_particles=10000, x_range=(0, imgsz), y_range=(0, imgsz))
     target_detected = False
     target_lost = False
     lost_counter = 0
@@ -274,13 +279,23 @@ def detect(save_img=False):
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
                     x_center = (xyxy[0] + xyxy[2]) / 2
-                    x_center_normalized = (x_center / im0.shape[1]) * 2 - 1
-                    print(f"Center X normalized: {x_center_normalized:.3f}")
+                    y_center = (xyxy[1] + xyxy[3]) / 2
 
-                    pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.1)
+                    x_center_normalized = (x_center / im0.shape[1]) * 2 - 1
+                    y_center_normalized = (y_center / im0.shape[0]) * 2 - 1
+
+                    print(f"Center X normalized: {x_center_normalized:.3f}")
+                    print(f"Center Y normalized: {y_center_normalized:.3f}")
+
+                    pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.05)
+                    pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.05)
 
                     with data_lock:
-                        shared_position = float(pf.estimate()[0])
+                        # what is estimate()?
+                        # shared_position = float(pf.estimate()[0])
+
+                        shared_position[0] = float(x_center_normalized)
+                        shared_position[1] = float(y_center_normalized)
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1

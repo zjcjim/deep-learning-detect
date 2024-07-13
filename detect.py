@@ -339,6 +339,9 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     print(opt)
 
+    detect_thread = None
+    thread_send = None
+
     if opt.source == 'pi':
         # register the backend IP address
         ip_register_url = ip_server_url + '/register'
@@ -369,7 +372,7 @@ if __name__ == '__main__':
             time.sleep(1)
 
         flask_server_url = f"http://{pi_ip}:5000/position"
-        webcam_url = f"http://{pi_ip}:9000/stream.mjpeg"
+        webcam_url = f"http://{pi_ip}:9000/stream.mjpg"
 
         thread_send = threading.Thread(target=send_position)
         thread_send.start()
@@ -385,23 +388,20 @@ if __name__ == '__main__':
             detect_thread = thread_detect
             
 
-    # TODO: Add a way to stop all threads when thread_send is not running
-    # Added but not tested
+    # stop threads on CTRL+C
     try:
         while True:
-            if detect_thread.is_alive():
+            if detect_thread is not None and detect_thread.is_alive():
                 detect_thread.join(1)
-            if thread_send.is_alive():
+            if thread_send is not None and thread_send.is_alive():
                 thread_send.join(1)
-            if not detect_thread.is_alive() and not thread_send.is_alive():
-                break
     except KeyboardInterrupt:
         print("CTRL+C pressed, stopping threads...")
         stop_flag.set()
 
-        if detect_thread.is_alive():
+        if detect_thread is not None and detect_thread.is_alive():
             detect_thread.join()
-        if thread_send.is_alive():
+        if thread_send is not None and thread_send.is_alive():
             thread_send.join()
 
     print('All threads stopped.')

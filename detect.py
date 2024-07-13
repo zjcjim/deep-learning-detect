@@ -88,6 +88,7 @@ def send_position():
     data = [0, 0]
     last_send_time = time.time()
 
+    session = requests.Session()
     while not stop_flag.is_set():
         with data_lock:
             if shared_position != [0, 0]:
@@ -103,14 +104,16 @@ def send_position():
                 last_send_time = time.time()
 
                 # waste too much time on sending data
+                # using session
 
-                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
+                response = session.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
                 if response.status_code == 200:
                     current_time = time.time()
                     time_interval = current_time - last_send_time
                     last_send_time = current_time
                     print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + '已发送到' + flask_server_url)
                     print(f'发送数据用时：: {time_interval:.2f} 秒')
+                    print("当前时间: ", current_time)
                 else:
                     print('无法发送位置数据。状态码:', response.status_code)
                     print('响应内容:', response.content)

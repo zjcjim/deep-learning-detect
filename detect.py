@@ -402,6 +402,17 @@ if __name__ == '__main__':
         if detect_thread is not None and detect_thread.is_alive():
             detect_thread.join()
         if thread_send is not None and thread_send.is_alive():
+
+            # reset gimbal position
+            try:
+                response = requests.post(flask_server_url, json={'position_x': str(0), 'position_y': str(0)})
+                if response.status_code == 200:
+                    print('Reset position has sent to ' + flask_server_url)
+                else:
+                    print('Unable to reset. Status code: ', response.status_code)
+                    print('Response: ', response.content)
+            except requests.exceptions.RequestException as e:
+                print('An error occurs during reset', e)
             thread_send.join()
 
     print('All threads stopped.')

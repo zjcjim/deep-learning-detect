@@ -86,6 +86,7 @@ def convert_to_tensor(data):
 def send_position():
     global shared_position
     data = [0, 0]
+    last_send_time = time.time()
 
     while not stop_flag.is_set():
         with data_lock:
@@ -99,16 +100,24 @@ def send_position():
 
         if data != [0, 0]:
             try:
+                last_send_time = time.time()
+
+                # waste too much time on sending data
+
                 response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
                 if response.status_code == 200:
+                    current_time = time.time()
+                    time_interval = current_time - last_send_time
+                    last_send_time = current_time
                     print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + '已发送到' + flask_server_url)
+                    print(f'发送数据用时：: {time_interval:.2f} 秒')
                 else:
                     print('无法发送位置数据。状态码:', response.status_code)
                     print('响应内容:', response.content)
             except requests.exceptions.RequestException as e:
                 print('发送请求时发生错误:', e)
         
-        time.sleep(0.2)
+        time.sleep(0.1)
         data = [0, 0]
 
 def detect(save_img=False):
@@ -374,9 +383,6 @@ if __name__ == '__main__':
         flask_server_url = f"http://{pi_ip}:5000/position"
         webcam_url = f"http://{pi_ip}:9000/stream.mjpg"
 
-        thread_send = threading.Thread(target=send_position)
-        thread_send.start()
-
     with torch.no_grad():
         if opt.update:
             thread_detect_and_optimize = threading.Thread(target=detect_and_optimize)
@@ -387,6 +393,9 @@ if __name__ == '__main__':
             thread_detect.start()
             detect_thread = thread_detect
             
+        time.sleep(10)    
+        thread_send = threading.Thread(target=send_position)
+        thread_send.start()
 
     # stop threads on CTRL+C
     try:

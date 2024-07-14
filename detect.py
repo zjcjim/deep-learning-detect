@@ -27,6 +27,8 @@ ip_server_url = 'http://124.71.164.229:5000'
 pi_ip = None
 
 shared_position = [0, 0]
+target_lost = False
+
 data_lock = threading.Lock()
 stop_flag = threading.Event()
 
@@ -84,7 +86,7 @@ def convert_to_tensor(data):
     return tensor_data.cpu().numpy()
 
 def send_position():
-    global shared_position
+    global shared_position, target_lost
     data = [0, 0]
     last_send_time = time.time()
 
@@ -106,12 +108,12 @@ def send_position():
                 # waste too much time on sending data
                 # using session
 
-                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
+                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
                 if response.status_code == 200:
                     current_time = time.time()
                     time_interval = current_time - last_send_time
                     last_send_time = current_time
-                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + '已发送到' + flask_server_url)
+                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + flask_server_url)
                     print(f'发送数据用时：: {time_interval:.2f} 秒')
                     print("当前时间: ", current_time)
                 else:
@@ -136,7 +138,7 @@ def detect(save_img=False):
     device = select_device(opt.device)
     half = device.type != 'cpu'
 
-    global shared_position
+    global shared_position, target_lost
 
     model = attempt_load(weights, map_location=device)
     stride = int(model.stride.max())
@@ -177,11 +179,13 @@ def detect(save_img=False):
 
     t0 = time.time()
 
-    pf = ParticleFilter(num_particles=10000, x_range=(0, imgsz), y_range=(0, imgsz))
+    pf = ParticleFilter(num_particles=30000, x_range=(0, imgsz), y_range=(0, imgsz))
     target_detected = False
     target_lost = False
     lost_counter = 0
+    find_counter = 0
     max_lost_frames = 30  # 允许目标丢失的最大帧数
+    max_find_frames = 30 
     initial_target_position = None  # 初始目标位置
 
     for path, img, im0s, vid_cap in dataset:
@@ -270,6 +274,7 @@ def detect(save_img=False):
                         label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
 
+                    # xyxy: 矩形框的坐标
                     x_center = (xyxy[0] + xyxy[2]) / 2
                     y_center = (xyxy[1] + xyxy[3]) / 2
 
@@ -295,6 +300,11 @@ def detect(save_img=False):
                 if lost_counter > max_lost_frames:
                     target_lost = True
                     print("Target lost")
+            elif detected_in_frame and target_detected:
+                find_counter += 1
+                if find_counter > max_find_frames:
+                    target_lost = False
+                    print("Target found")
 
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
 

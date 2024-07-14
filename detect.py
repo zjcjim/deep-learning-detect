@@ -88,7 +88,7 @@ def send_position():
     data = [0, 0]
     last_send_time = time.time()
 
-    session = requests.Session()
+    #session = requests.Session()
     while not stop_flag.is_set():
         with data_lock:
             if shared_position != [0, 0]:
@@ -106,7 +106,7 @@ def send_position():
                 # waste too much time on sending data
                 # using session
 
-                response = session.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
+                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1])})
                 if response.status_code == 200:
                     current_time = time.time()
                     time_interval = current_time - last_send_time
@@ -155,10 +155,13 @@ def detect(save_img=False):
 
     vid_path, vid_writer = None, None
     if webcam:
+
+        # 检查是否可以显示图像
         view_img = check_imshow()
+        # 为 cuDNN 启用基准测试以加速卷积操作
         cudnn.benchmark = True
         if source == 'pi':
-            dataset = LoadStreams(webcam_url, img_size=imgsz, stride=stride)
+            dataset = LoadStreams(webcam_url, img_size=imgsz, stride=stride, fps=60)
         else:
             dataset = LoadStreams(source, img_size=imgsz, stride=stride)
     else:
@@ -182,6 +185,9 @@ def detect(save_img=False):
     initial_target_position = None  # 初始目标位置
 
     for path, img, im0s, vid_cap in dataset:
+
+        start_time = time.time()
+
         if stop_flag.is_set():
             break
 
@@ -213,6 +219,7 @@ def detect(save_img=False):
         closest_detection = None
         closest_distance = float('inf')
         for i, det in enumerate(pred):
+            # maybe here?
             if webcam:
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -291,8 +298,12 @@ def detect(save_img=False):
 
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
 
+            # some problems with the code below
+            # video lag
             if view_img:
+                
                 cv2.imshow(str(p), im0)
+                print(f"Time for processing: {time.time() - start_time:.3f}s")
                 cv2.waitKey(1)
 
             if save_img:

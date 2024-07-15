@@ -101,7 +101,7 @@ def send_position():
                 shared_position[0] = 0
                 shared_position[1] = 0
 
-        if data != [0, 0]:
+        if data != [0, 0] or target_lost:
             try:
                 last_send_time = time.time()
 
@@ -184,8 +184,8 @@ def detect(save_img=False):
     target_lost = False
     lost_counter = 0
     find_counter = 0
-    max_lost_frames = 30  # 允许目标丢失的最大帧数
-    max_find_frames = 30 
+    max_lost_frames = 60  # 允许目标丢失的最大帧数
+    max_find_frames = 3 
     initial_target_position = None  # 初始目标位置
 
     for path, img, im0s, vid_cap in dataset:
@@ -297,14 +297,17 @@ def detect(save_img=False):
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1
+                print(f"Lost counter: {lost_counter}")
                 if lost_counter > max_lost_frames:
                     target_lost = True
                     print("Target lost")
+                    find_counter = 0
             elif detected_in_frame and target_detected:
                 find_counter += 1
                 if find_counter > max_find_frames:
                     target_lost = False
                     print("Target found")
+                    lost_counter = 0
 
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
 
@@ -353,7 +356,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default='yolov7.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source, pi for picamera')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.65, help='object confidence threshold')
+    parser.add_argument('--conf-thres', type=float, default=0.7, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')

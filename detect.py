@@ -27,7 +27,7 @@ ip_server_url = 'http://124.71.164.229:5000'
 pi_ip = None
 
 shared_position = [0, 0]
-shared_rectangle = [0, 0]
+shared_rectangle = [0, 0, 0, 0]
 target_lost = False
 
 position_data_lock = threading.Lock()
@@ -132,22 +132,36 @@ def send_position():
 # send rectangle data to the server
 def send_rectangle():
     global shared_rectangle, target_lost
-    data = [0, 0]
+    data = [0, 0, 0, 0]
 
     while not stop_flag.is_set():
         with rectangle_data_lock:
-            if shared_rectangle != [0, 0]:
+            if shared_rectangle != [0, 0, 0, 0]:
                 data[0] = shared_rectangle[0]
                 data[1] = shared_rectangle[1]
+                data[2] = shared_rectangle[2]
+                data[3] = shared_rectangle[3]
 
                 shared_rectangle[0] = 0
                 shared_rectangle[1] = 0
+                shared_rectangle[2] = 0
+                shared_rectangle[3] = 0
 
-        if data != [0, 0] or target_lost:
+        if data != [0, 0, 0, 0] or target_lost:
             try:
-                response = requests.post(rectangle_server_url, json={'rectangle_lt': str(data[0]), 'rectangle_rb': str(data[1]), 'target_lost': str(target_lost)})
+                response = requests.post(rectangle_server_url, json={'rectangle_lt_x': str(data[0]), 
+                                                                     'rectangle_lt_y': str(data[1]), 
+                                                                     'rectangle_rb_x': str(data[2]), 
+                                                                     'rectangle_rb_y': str(data[3]), 
+                                                                     'target_lost': str(target_lost)})
                 if response.status_code == 200:
-                    print('Rectangle data: ' + 'rectangle_lt = ' + str(data[0]) + ' ' + 'rectangle_rb = ' + str(data[1]) + ' ' + 'target_lost? ' + str(target_lost) + ' has been sent to ' + rectangle_server_url)
+                    print('Rectangle data: ' + 
+                          'rectangle_lt_x = ' + str(data[0]) + ' ' + 
+                          'rectangle_lt_y = ' + str(data[1]) + ' ' + 
+                          'rectangle_rb_x = ' + str(data[2]) + ' ' + 
+                          'rectangle_rb_y = ' + str(data[3]) + ' ' + 
+                          'target_lost? ' + str(target_lost) + 
+                          ' has been sent to ' + rectangle_server_url)
                 else:
                     print('Unable to send rectangle data. Status code:', response.status_code)
                     print('Response:', response.content)
@@ -155,7 +169,7 @@ def send_rectangle():
                 print('An error occurred while sending rectangle data:', e)
         
         time.sleep(0.1)
-        data = [0, 0]
+        data = [0, 0, 0, 0]
 
 
 
@@ -329,8 +343,10 @@ def detect(save_img=False):
                             shared_position[1] = float(y_center_normalized)
 
                         with rectangle_data_lock:
-                            shared_rectangle[0] = xyxy[0]
-                            shared_rectangle[1] = xyxy[3]
+                            shared_rectangle[0] = float(xyxy[0])
+                            shared_rectangle[1] = float(xyxy[1])
+                            shared_rectangle[2] = float(xyxy[2])
+                            shared_rectangle[3] = float(xyxy[3])
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1

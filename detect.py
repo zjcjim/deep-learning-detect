@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 import requests
-import json
+# import json
 import socket
 import time
 
@@ -90,7 +90,7 @@ def convert_to_tensor(data):
 def send_position():
     global shared_position, target_lost
     data = [0, 0]
-    last_send_time = time.time()
+    # last_send_time = time.time()
 
     session = requests.Session()
     session.keep_alive = True
@@ -107,21 +107,21 @@ def send_position():
 
         if data != [0, 0] or target_lost:
             try:
-                last_send_time = time.time()
+                # last_send_time = time.time()
 
                 # maybe in TODO list
                 # waste too much time on sending data
                 # using session
 
                 response = session.post(pi_flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
-                if response.status_code == 200:
-                    current_time = time.time()
-                    time_interval = current_time - last_send_time
-                    last_send_time = current_time
-                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + pi_flask_server_url)
-                    print(f'发送数据用时：: {time_interval:.2f} 秒')
-                    print("当前时间: ", current_time)
-                else:
+                if response.status_code != 200:
+                    # current_time = time.time()
+                    # time_interval = current_time - last_send_time
+                    # last_send_time = current_time
+                    # print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + pi_flask_server_url)
+                    # print(f'发送数据用时：: {time_interval:.2f} 秒')
+                    # print("当前时间: ", current_time)
+                    # a = 1
                     print('无法发送位置数据。状态码:', response.status_code)
                     print('响应内容:', response.content)
             except requests.exceptions.RequestException as e:
@@ -159,15 +159,14 @@ def send_rectangle():
                                                                      'rectangle_rb_x': str(data[2]), 
                                                                      'rectangle_rb_y': str(data[3]), 
                                                                      'target_lost': str(target_lost)})
-                if response.status_code == 200:
-                    print('Rectangle data: ' + 
-                          'rectangle_lt_x = ' + str(data[0]) + ' ' + 
-                          'rectangle_lt_y = ' + str(data[1]) + ' ' + 
-                          'rectangle_rb_x = ' + str(data[2]) + ' ' + 
-                          'rectangle_rb_y = ' + str(data[3]) + ' ' + 
-                          'target_lost? ' + str(target_lost) + 
-                          ' has been sent to ' + rectangle_server_url)
-                else:
+                if response.status_code != 200:
+                    # print('Rectangle data: ' + 
+                    #       'rectangle_lt_x = ' + str(data[0]) + ' ' + 
+                    #       'rectangle_lt_y = ' + str(data[1]) + ' ' + 
+                    #       'rectangle_rb_x = ' + str(data[2]) + ' ' + 
+                    #       'rectangle_rb_y = ' + str(data[3]) + ' ' + 
+                    #       'target_lost? ' + str(target_lost) + 
+                    #       ' has been sent to ' + rectangle_server_url)
                     print('Unable to send rectangle data. Status code:', response.status_code)
                     print('Response:', response.content)
             except requests.exceptions.RequestException as e:
@@ -187,7 +186,7 @@ def detect(save_img=False):
     save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))
     (save_dir / 'labels' if save_txt else save_dir).mkdir(parents=True, exist_ok=True)
 
-    set_logging()
+    set_logging(1)
     device = select_device(opt.device)
     half = device.type != 'cpu'
 
@@ -333,8 +332,8 @@ def detect(save_img=False):
                     x_center_normalized = (x_center / im0.shape[1]) * 2 - 1
                     y_center_normalized = (y_center / im0.shape[0]) * 2 - 1
 
-                    print(f"Center X normalized: {x_center_normalized:.3f}")
-                    print(f"Center Y normalized: {y_center_normalized:.3f}")
+                    # print(f"Center X normalized: {x_center_normalized:.3f}")
+                    # print(f"Center Y normalized: {y_center_normalized:.3f}")
 
                     pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.05)
                     pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.05)
@@ -355,25 +354,25 @@ def detect(save_img=False):
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1
-                print(f"Lost counter: {lost_counter}")
+                # print(f"Lost counter: {lost_counter}")
                 if lost_counter > max_lost_frames:
                     target_lost = True
-                    print("Target lost")
+                    # print("Target lost")
                     find_counter = 0
             elif detected_in_frame and target_detected:
                 find_counter += 1
                 if find_counter > max_find_frames:
                     target_lost = False
-                    print("Target found")
+                    # print("Target found")
                     lost_counter = 0
 
-            print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
+            # print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
 
-            if view_img:
+            # if view_img:
                 
-                cv2.imshow(str(p), im0)
-                print(f"Time for processing: {time.time() - start_time:.3f}s")
-                cv2.waitKey(1)
+            #     cv2.imshow(str(p), im0)
+            #     # print(f"Time for processing: {time.time() - start_time:.3f}s")
+            #     cv2.waitKey(1)
 
             if save_img:
                 if dataset.mode == 'image':

@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import logging
 
 app = Flask(__name__)
 CORS(app)
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 rectangle = [0, 0, 0, 0]
 is_target_lost = True
@@ -26,21 +29,21 @@ def update_rectangle_position():
                          float(rectangle_rb_x), 
                          float(rectangle_rb_y)]
     
-    print("Received data: ", rectangle, is_target_lost)
+    # print("Received data: ", rectangle, is_target_lost)
     return jsonify({"message": "Data received"}), 200
 
 @app.route('/rectangle', methods=['GET'])
 def get_rectangle_position():
     global rectangle
     if rectangle is not None and rectangle != [0, 0, 0, 0]:
-        print("Sending data: ", rectangle, is_target_lost)
+        # print("Sending data: ", rectangle, is_target_lost)
         return jsonify({'rectangle_lt_x': str(rectangle[0]), 
                         'rectangle_lt_y': str(rectangle[1]), 
                         'rectangle_rb_x': str(rectangle[2]), 
                         'rectangle_rb_y': str(rectangle[3]),
                         'target_lost': str(is_target_lost)}), 200
     else:
-        return jsonify({"error": "No data available"}), 404
+        return jsonify({"error": "No data available"}), 204
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)

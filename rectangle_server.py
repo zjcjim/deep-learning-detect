@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 rectangle = [0, 0, 0, 0]
 is_target_lost = True
@@ -9,14 +11,23 @@ is_target_lost = True
 def update_rectangle_position():
     global rectangle
     data = request.get_json()
-    is_target_lost = (data.get('target_lost').lower() == 'true')
-    if not is_target_lost:
-        rectangle[0] = float(data.get('rectangle_lt_x'))
-        rectangle[1] = float(data.get('rectangle_lt_y'))
-        rectangle[2] = float(data.get('rectangle_rb_x'))
-        rectangle[3] = float(data.get('rectangle_rb_y'))
+    target_lost = data.get('target_lost')
+    rectangle_lt_x = data.get('rectangle_lt_x')
+    rectangle_lt_y = data.get('rectangle_lt_y')
+    rectangle_rb_x = data.get('rectangle_rb_x')
+    rectangle_rb_y = data.get('rectangle_rb_y')
+    if rectangle_lt_x is None or rectangle_lt_y is None or rectangle_rb_x is None or rectangle_rb_y is None or target_lost is None:
+        return jsonify({"error": "Invalid data"}), 400
+    else:
+        is_target_lost = target_lost.lower() == 'true'
+        if not is_target_lost:
+            rectangle = [float(rectangle_lt_x), 
+                         float(rectangle_lt_y), 
+                         float(rectangle_rb_x), 
+                         float(rectangle_rb_y)]
     
     print("Received data: ", rectangle, is_target_lost)
+    return jsonify({"message": "Data received"}), 200
 
 @app.route('/rectangle', methods=['GET'])
 def get_rectangle_position():

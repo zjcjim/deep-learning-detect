@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# 用于存储矩形位置的全局变量
 rectangle = [0, 0, 0, 0]
 is_target_lost = True
 

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Stream with Rectangle</title>
+    <style>
+        #videoContainer {
+            position: relative;
+            width: 640px;
+            height: 480px;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: 100%;
+        }
+
+        #rectangleCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="videoContainer">
+        <video id="videoElement" autoplay></video>
+        <canvas id="rectangleCanvas"></canvas>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('videoElement');
+        const canvas = document.getElementById('rectangleCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let pi_ip = null;
+
+        // 获取用户媒体（视频）流
+        function startVideoStream(ip) {
+            const videoUrl = 'http://' + ip + ':9000/stream.mjpg';
+            videoElement.src = videoUrl;
+            videoElement.play();
+        }
+
+        function fetchDeviceIP() {
+            fetch('http://124.71.164.229:5000/get_ips')
+                .then(response => response.json())
+                .then(data => {
+                    pi_ip = data['pi'];
+                    if (pi_ip) {
+                        console.log(`IP address for 'pi': ${pi_ip}`);
+                        startVideoStream(pi_ip);
+                    } else {
+                        console.log(`'pi' device not found. Retrying...`);
+                        setTimeout(fetchDeviceIP, 2000);  // Retry after 2 seconds
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching IPs:', error);
+                    setTimeout(fetchDeviceIP, 2000);  // Retry after 2 seconds
+                });
+        }
+
+        fetchDeviceIP(); // 初始调用以获取设备IP并启动视频流
+
+        // 获取矩形坐标并绘制
+        function getRectangleAndDraw() {
+            fetch('http://localhost:5000/rectangle')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.log(data.error);
+                    } else if (data.target_lost === 'true') {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    } else {
+                        const x1 = parseFloat(data.rectangle_lt_x);
+                        const y1 = parseFloat(data.rectangle_lt_y);
+                        const x2 = parseFloat(data.rectangle_rb_x);
+                        const y2 = parseFloat(data.rectangle_rb_y);
+                        drawRectangle(x1, y1, x2, y2);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching rectangle data.', error);
+                });
+        }
+
+        function drawRectangle(x1, y1, x2, y2) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.rect(x1, y1, x2 - x1, y2 - y1);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'red';
+            ctx.stroke();
+        }
+
+        // 每秒获取一次矩形数据并绘制
+        setInterval(getRectangleAndDraw, 1000);
+    </script>
+</body>
+
+</html>

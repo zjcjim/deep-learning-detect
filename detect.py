@@ -27,9 +27,11 @@ ip_server_url = 'http://124.71.164.229:5000'
 pi_ip = None
 
 shared_position = [0, 0]
+shared_rectangle = [0, 0]
 target_lost = False
 
-data_lock = threading.Lock()
+position_data_lock = threading.Lock()
+rectangle_data_lock = threading.Lock()
 stop_flag = threading.Event()
 
 class ParticleFilter:
@@ -92,7 +94,7 @@ def send_position():
 
     #session = requests.Session()
     while not stop_flag.is_set():
-        with data_lock:
+        with position_data_lock:
             if shared_position != [0, 0]:
 
                 data[0] = shared_position[0]
@@ -105,15 +107,16 @@ def send_position():
             try:
                 last_send_time = time.time()
 
+                # maybe in TODO list
                 # waste too much time on sending data
                 # using session
 
-                response = requests.post(flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
+                response = requests.post(pi_flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
                 if response.status_code == 200:
                     current_time = time.time()
                     time_interval = current_time - last_send_time
                     last_send_time = current_time
-                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + flask_server_url)
+                    print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + pi_flask_server_url)
                     print(f'发送数据用时：: {time_interval:.2f} 秒')
                     print("当前时间: ", current_time)
                 else:
@@ -124,6 +127,37 @@ def send_position():
         
         time.sleep(0.1)
         data = [0, 0]
+
+
+# send rectangle data to the server
+def send_rectangle():
+    global shared_rectangle, target_lost
+    data = [0, 0]
+
+    while not stop_flag.is_set():
+        with rectangle_data_lock:
+            if shared_rectangle != [0, 0]:
+                data[0] = shared_rectangle[0]
+                data[1] = shared_rectangle[1]
+
+                shared_rectangle[0] = 0
+                shared_rectangle[1] = 0
+
+        if data != [0, 0] or target_lost:
+            try:
+                response = requests.post(rectangle_server_url, json={'rectangle_lt': str(data[0]), 'rectangle_rb': str(data[1]), 'target_lost': str(target_lost)})
+                if response.status_code == 200:
+                    print('Rectangle data: ' + 'rectangle_lt = ' + str(data[0]) + ' ' + 'rectangle_rb = ' + str(data[1]) + ' ' + 'target_lost? ' + str(target_lost) + ' has been sent to ' + rectangle_server_url)
+                else:
+                    print('Unable to send rectangle data. Status code:', response.status_code)
+                    print('Response:', response.content)
+            except requests.exceptions.RequestException as e:
+                print('An error occurred while sending rectangle data:', e)
+        
+        time.sleep(0.1)
+        data = [0, 0]
+
+
 
 def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
@@ -223,7 +257,6 @@ def detect(save_img=False):
         closest_detection = None
         closest_distance = float('inf')
         for i, det in enumerate(pred):
-            # maybe here?
             if webcam:
                 p, s, im0, frame = path[i], '%g: ' % i, im0s[i].copy(), dataset.count
             else:
@@ -288,12 +321,16 @@ def detect(save_img=False):
                     pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.05)
 
                     if pi_ip is not None:
-                        with data_lock:
+                        with position_data_lock:
                             # what is estimate()?
                             # shared_position = float(pf.estimate()[0])
 
                             shared_position[0] = float(x_center_normalized)
                             shared_position[1] = float(y_center_normalized)
+
+                        with rectangle_data_lock:
+                            shared_rectangle[0] = xyxy[0]
+                            shared_rectangle[1] = xyxy[3]
 
             if not detected_in_frame and target_detected:
                 lost_counter += 1
@@ -311,8 +348,6 @@ def detect(save_img=False):
 
             print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')
 
-            # some problems with the code below
-            # video lag
             if view_img:
                 
                 cv2.imshow(str(p), im0)
@@ -376,7 +411,7 @@ if __name__ == '__main__':
     print(opt)
 
     detect_thread = None
-    thread_send = None
+    thread_send_position = None
 
     if opt.source == 'pi':
         # register the backend IP address
@@ -407,7 +442,9 @@ if __name__ == '__main__':
 
             time.sleep(1)
 
-        flask_server_url = f"http://{pi_ip}:5000/position"
+        rectangle_server_url = f"http://127.0.0.1:5000/rectangle"
+
+        pi_flask_server_url = f"http://{pi_ip}:5000/position"
         webcam_url = f"http://{pi_ip}:9000/stream.mjpg"
 
     with torch.no_grad():
@@ -420,35 +457,46 @@ if __name__ == '__main__':
             thread_detect.start()
             detect_thread = thread_detect
             
-        time.sleep(10)    
-        thread_send = threading.Thread(target=send_position)
-        thread_send.start()
+        time.sleep(10)
+
+        thread_send_position = threading.Thread(target=send_position)
+        thread_send_rectangle = threading.Thread(target=send_rectangle)
+
+        thread_send_position.start()
+        thread_send_rectangle.start()
 
     # stop threads on CTRL+C
     try:
         while True:
             if detect_thread is not None and detect_thread.is_alive():
                 detect_thread.join(1)
-            if thread_send is not None and thread_send.is_alive():
-                thread_send.join(1)
+            if thread_send_position is not None and thread_send_position.is_alive():
+                thread_send_position.join(1)
+            if thread_send_rectangle is not None and thread_send_rectangle.is_alive():
+                thread_send_rectangle.join(1)
+
     except KeyboardInterrupt:
         print("CTRL+C pressed, stopping threads...")
         stop_flag.set()
 
         if detect_thread is not None and detect_thread.is_alive():
             detect_thread.join()
-        if thread_send is not None and thread_send.is_alive():
+
+        if thread_send_position is not None and thread_send_position.is_alive():
 
             # reset gimbal position
             try:
-                response = requests.post(flask_server_url, json={'position_x': str(0), 'position_y': str(0)})
+                response = requests.post(pi_flask_server_url, json={'position_x': str(0), 'position_y': str(0)})
                 if response.status_code == 200:
-                    print('Reset position has sent to ' + flask_server_url)
+                    print('Reset position has sent to ' + pi_flask_server_url)
                 else:
                     print('Unable to reset. Status code: ', response.status_code)
                     print('Response: ', response.content)
             except requests.exceptions.RequestException as e:
                 print('An error occurs during reset', e)
-            thread_send.join()
+            thread_send_position.join()
+
+        if thread_send_rectangle is not None and thread_send_rectangle.is_alive():
+            thread_send_rectangle.join()
 
     print('All threads stopped.')

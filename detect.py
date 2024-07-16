@@ -92,7 +92,9 @@ def send_position():
     data = [0, 0]
     last_send_time = time.time()
 
-    #session = requests.Session()
+    session = requests.Session()
+    session.keep_alive = True
+
     while not stop_flag.is_set():
         with position_data_lock:
             if shared_position != [0, 0]:
@@ -111,7 +113,7 @@ def send_position():
                 # waste too much time on sending data
                 # using session
 
-                response = requests.post(pi_flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
+                response = session.post(pi_flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
                 if response.status_code == 200:
                     current_time = time.time()
                     time_interval = current_time - last_send_time
@@ -125,7 +127,7 @@ def send_position():
             except requests.exceptions.RequestException as e:
                 print('发送请求时发生错误:', e)
         
-        time.sleep(0.1)
+        time.sleep(0.05)
         data = [0, 0]
 
 
@@ -133,6 +135,9 @@ def send_position():
 def send_rectangle():
     global shared_rectangle, target_lost
     data = [0, 0, 0, 0]
+
+    session = requests.Session()
+    session.keep_alive = True
 
     while not stop_flag.is_set():
         with rectangle_data_lock:
@@ -149,7 +154,7 @@ def send_rectangle():
 
         if data != [0, 0, 0, 0] or target_lost:
             try:
-                response = requests.post(rectangle_server_url, json={'rectangle_lt_x': str(data[0]), 
+                response = session.post(rectangle_server_url, json={'rectangle_lt_x': str(data[0]), 
                                                                      'rectangle_lt_y': str(data[1]), 
                                                                      'rectangle_rb_x': str(data[2]), 
                                                                      'rectangle_rb_y': str(data[3]), 
@@ -168,7 +173,7 @@ def send_rectangle():
             except requests.exceptions.RequestException as e:
                 print('An error occurred while sending rectangle data:', e)
         
-        time.sleep(0.1)
+        time.sleep(0.05)
         data = [0, 0, 0, 0]
 
 

@@ -4,15 +4,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Stream with Rectangle</title>
+    <title>Car Predator</title>
     <style>
-        #videoContainer {
-            position: relative;
-            width: 1280px;
-            height: 720px;
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #000901;
+            /* 背景颜色，可以根据需要调整 */
         }
 
-        #videoElement {
+        .title {
+            color: #ffffff;
+            font-size: 48px;
+            margin-bottom: 20px;
+            font-family: 'Impact', Charcoal, sans-serif;
+            text-shadow: 4px 4px #ff0000, -4px -4px #0000ff;
+        }
+
+        #videoContainer {
+            position: relative;
+            width: 60%;
+            height: 80%;
+            max-width: 1280px;
+            max-height: 720px;
+            border: 5px solid #ffffff;
+            /* 边框 */
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #videoStream {
+            display: block;
             width: 100%;
             height: 100%;
         }
@@ -28,6 +57,7 @@
 </head>
 
 <body>
+    <h1 class="title">Fast and Furious Tracing</h1>
     <div id="videoContainer">
         <img src="" id="videoStream" alt="Video Stream" />
         <canvas id="videoCanvas" width="1280" height="720"></canvas>
@@ -41,6 +71,9 @@
         let pi_ip = null;
         let backend_ip = null;
 
+        let currentRect = { x1: 0, y1: 0, x2: 0, y2: 0 };
+        let targetRect = { x1: 0, y1: 0, x2: 0, y2: 0 };
+
         function fetchDeviceIP() {
             fetch('http://124.71.164.229:5000/get_ips')
                 .then(response => response.json())
@@ -50,7 +83,6 @@
 
                     if (pi_ip) {
                         console.log(`IP address for 'pi': ${pi_ip}`);
-                        // 设置视频流的 src 属性
                         videoStream.src = 'http://' + pi_ip + ':9000/stream.mjpg';
                     } else {
                         console.log(`'pi' device not found. Retrying...`);
@@ -76,15 +108,14 @@
                 fetch(`http://${backend_ip}:5000/rectangle`)
                     .then(response => response.json())
                     .then(data => {
-                        const x1 = parseInt(data['rectangle_lt_x']);
-                        const y1 = parseInt(data['rectangle_lt_y']);
-                        const x2 = parseInt(data['rectangle_rb_x']);
-                        const y2 = parseInt(data['rectangle_rb_y']);
+                        targetRect.x1 = parseInt(data['rectangle_lt_x']);
+                        targetRect.y1 = parseInt(data['rectangle_lt_y']);
+                        targetRect.x2 = parseInt(data['rectangle_rb_x']);
+                        targetRect.y2 = parseInt(data['rectangle_rb_y']);
                         const targetLost = data['target_lost'] === 'true';
 
-                        if (!targetLost) {
-                            drawRectangle(x1, y1, x2, y2);
-                            console.log(`draw rectangle: (${x1}, ${y1}) - (${x2}, ${y2})`);
+                        if (targetLost) {
+                            clearCanvas();
                         }
                     })
                     .catch(error => {
@@ -93,14 +124,59 @@
             }, 100); // 每秒获取一次
         }
 
-        function drawRectangle(x1, y1, x2, y2) {
+        function interpolate(current, target, factor) {
+            return current + (target - current) * factor;
+        }
+
+        function animate() {
+            currentRect.x1 = interpolate(currentRect.x1, targetRect.x1, 0.1);
+            currentRect.y1 = interpolate(currentRect.y1, targetRect.y1, 0.1);
+            currentRect.x2 = interpolate(currentRect.x2, targetRect.x2, 0.1);
+            currentRect.y2 = interpolate(currentRect.y2, targetRect.y2, 0.1);
+
+            clearCanvas();
+            drawCrosshairAndCorners(currentRect.x1, currentRect.y1, currentRect.x2, currentRect.y2);
+
+            requestAnimationFrame(animate);
+        }
+
+        function drawCrosshairAndCorners(x1, y1, x2, y2) {
             // 清除之前的绘制
             ctx.clearRect(0, 0, videoCanvas.width, videoCanvas.height);
 
-            // 绘制矩形
-            ctx.strokeStyle = 'red';
+            const centerX = (x1 + x2) / 2;
+            const centerY = (y1 + y2) / 2;
+
+            // 绘制十字
+            ctx.strokeStyle = '#06f716';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(centerX - 18, centerY);
+            ctx.lineTo(centerX + 18, centerY);
+            ctx.moveTo(centerX, centerY - 18);
+            ctx.lineTo(centerX, centerY + 18);
+            ctx.stroke();
+
+            // 绘制四个角
             ctx.lineWidth = 10;
-            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+            ctx.beginPath();
+            // 左上角
+            ctx.moveTo(x1, y1 + 40);
+            ctx.lineTo(x1, y1);
+            ctx.lineTo(x1 + 40, y1);
+            // 右上角
+            ctx.moveTo(x2, y1 + 40);
+            ctx.lineTo(x2, y1);
+            ctx.lineTo(x2 - 40, y1);
+            // 左下角
+            ctx.moveTo(x1, y2 - 40);
+            ctx.lineTo(x1, y2);
+            ctx.lineTo(x1 + 40, y2);
+            // 右下角
+            ctx.moveTo(x2, y2 - 40);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x2 - 40, y2);
+            ctx.stroke();
         }
 
         function clearCanvas() {
@@ -109,6 +185,7 @@
 
         document.addEventListener('DOMContentLoaded', (event) => {
             fetchDeviceIP();
+            animate();
         });
     </script>
 </body>

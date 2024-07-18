@@ -114,11 +114,12 @@ def send_position():
                 # using session
 
                 response = session.post(pi_flask_server_url, json={'position_x': str(data[0]), 'position_y': str(data[1]), 'target_lost': str(target_lost)})
+                print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + pi_flask_server_url)
                 if response.status_code != 200:
                     # current_time = time.time()
                     # time_interval = current_time - last_send_time
                     # last_send_time = current_time
-                    # print('位置数据:' + 'position_x = ' + str(data[0]) + ' ' + 'position_y = '+ str(data[1]) + ' ' + 'target_lost? '+ str(target_lost) + '已发送到' + pi_flask_server_url)
+                    
                     # print(f'发送数据用时：: {time_interval:.2f} 秒')
                     # print("当前时间: ", current_time)
                     # a = 1
@@ -231,7 +232,7 @@ def detect(save_img=False):
 
     t0 = time.time()
 
-    pf = ParticleFilter(num_particles=30000, x_range=(0, imgsz), y_range=(0, imgsz))
+    pf = ParticleFilter(num_particles=70000, x_range=(0, imgsz), y_range=(0, imgsz))
     target_detected = False
     target_lost = False
     lost_counter = 0
@@ -335,8 +336,8 @@ def detect(save_img=False):
                     # print(f"Center X normalized: {x_center_normalized:.3f}")
                     # print(f"Center Y normalized: {y_center_normalized:.3f}")
 
-                    pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.05)
-                    pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.05)
+                    pf.update(np.array([convert_to_tensor(x_center_normalized), 0]), std=0.005)
+                    pf.update(np.array([convert_to_tensor(y_center_normalized), 0]), std=0.005)
 
                     if pi_ip is not None:
                         with position_data_lock:
